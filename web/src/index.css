@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS custom properties: dark theme (default) ───────────────────── */
+:root {
+  /* Background */
+  --clr-bg1: #0a0d24;
+  --clr-bg2: #0f1233;
+  --clr-bg3: #151844;
+
+  /* Text */
+  --clr-txt1: #F4F0F1;
+  --clr-txt2: rgba(244, 240, 241, 0.52);
+  --clr-txt3: rgba(244, 240, 241, 0.32);
+
+  /* Functional */
+  --clr-accent: #4757E8;
+  --clr-up: #F1C40F;
+  --clr-down: #003459;
+  --clr-warn: #EB9DFF;
+  --clr-gold: #f5c542;
+  --clr-border: rgba(71, 87, 232, 0.18);
+  --clr-border-dim: rgba(71, 87, 232, 0.18);
+  --clr-border-faint: rgba(71, 87, 232, 0.10);
+  --clr-sector-avg: rgba(71, 87, 232, 0.45);
+
+  /* Misc */
+  --clr-hover: rgba(71, 87, 232, 0.06);
+  --clr-card-hover: #222832;
+  --clr-bar-zero: rgba(244, 240, 241, 0.08);
+  --clr-btn-disabled-bg: #1c2129;
+  --clr-btn-disabled-text: #6e7681;
+  --clr-scrollbar-hover: rgba(71, 87, 232, 0.35);
+  --clr-rank-bar-bg: rgba(71, 87, 232, 0.12);
+
+  /* Sector */
+  --clr-sector-ferrous: #5b6aee;
+  --clr-sector-energy: #f0a050;
+  --clr-sector-nonferrous: #F1C40F;
+  --clr-sector-agri: #ADE699;
+  --clr-sector-newenergy: #EB9DFF;
+}
+
+/* ── Light theme ──────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --clr-bg1: #f0f2f5;
+  --clr-bg2: #ffffff;
+  --clr-bg3: #e8eaf0;
+
+  --clr-txt1: #1a1d33;
+  --clr-txt2: rgba(26, 29, 51, 0.55);
+  --clr-txt3: rgba(26, 29, 51, 0.38);
+
+  --clr-accent: #4757E8;
+  --clr-up: #b8960a;
+  --clr-down: #cf4520;
+  --clr-warn: #9b30d4;
+  --clr-gold: #b8960a;
+  --clr-border: rgba(71, 87, 232, 0.22);
+  --clr-border-dim: rgba(71, 87, 232, 0.22);
+  --clr-border-faint: rgba(71, 87, 232, 0.12);
+  --clr-sector-avg: rgba(71, 87, 232, 0.55);
+
+  --clr-hover: rgba(71, 87, 232, 0.08);
+  --clr-card-hover: #dadce8;
+  --clr-bar-zero: rgba(26, 29, 51, 0.08);
+  --clr-btn-disabled-bg: #d0d3e0;
+  --clr-btn-disabled-text: #8a8fa8;
+  --clr-scrollbar-hover: rgba(71, 87, 232, 0.35);
+  --clr-rank-bar-bg: rgba(71, 87, 232, 0.14);
+
+  --clr-sector-ferrous: #4a56d4;
+  --clr-sector-energy: #d48835;
+  --clr-sector-nonferrous: #b8960a;
+  --clr-sector-agri: #5c9e4a;
+  --clr-sector-newenergy: #9b30d4;
+}
+
+/* ── Connection dot ── */
+.dot-live       { background: var(--clr-up); box-shadow: 0 0 6px var(--clr-up); animation: pulse 2s infinite; }
+.dot-connecting { background: var(--clr-gold); box-shadow: 0 0 6px var(--clr-gold); }
+.dot-off        { background: var(--clr-down); box-shadow: 0 0 6px var(--clr-down); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--clr-border-dim); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--clr-scrollbar-hover); }
+
+/* ── Detail table ── */
+.detail-table .sector-divider td {
+  background: var(--clr-bg3); color: var(--clr-accent);
+  font-size: 10px; font-weight: 700; padding: 5px 10px;
+  letter-spacing: 0.5px; border-top: 1px solid var(--clr-border-dim);
+}
+.detail-table td {
+  padding: 5px 10px; border-bottom: 1px solid var(--clr-border-faint);
+  white-space: nowrap; transition: color 0.3s ease;
+}
+.detail-table tbody tr.data-row:hover { background: var(--clr-hover); }
+.detail-table tbody tr.data-row { transition: background 0.12s; }
+
+/* ── Alert ── */
+.alert-active { animation: alertPulse 1.2s infinite; }
+@keyframes alertPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+/* ── Ranking list ── */
+.rank-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 12px; font-size: 12px; position: relative;
+  border-bottom: 1px solid var(--clr-border-faint); min-height: 26px;
+}
+.rank-row .rank-num { width: 22px; text-align: right; font-size: 10px; color: var(--clr-txt3); font-weight: 600; }
+.rank-row:nth-child(1) .rank-num,
+.rank-row:nth-child(2) .rank-num,
+.rank-row:nth-child(3) .rank-num { color: var(--clr-gold); }
+.rank-row .rank-name { width: 56px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rank-row .rank-code { font-size: 10px; color: var(--clr-txt3); width: 66px; white-space: nowrap; }
+.rank-row .rank-change { width: 60px; text-align: right; font-weight: 700; }
+.rank-row .rank-bar-wrap { flex: 1; height: 4px; background: var(--clr-rank-bar-bg); border-radius: 2px; overflow: hidden; min-width: 20px; }
+.rank-row .rank-bar-fill { height: 100%; border-radius: 2px; transition: width 0.45s ease; }
+.rank-row:hover { background: var(--clr-hover); }
+
+/* ── Panel collapse ── */
+.panel-collapsed-l { width: 42px !important; min-width: 42px !important; }
+.panel-collapsed-l * { display: none !important; }
+.panel-collapsed-r { flex: 0 0 42px !important; min-width: 42px !important; }
+.panel-collapsed-r * { display: none !important; }
+
+/* ── Period buttons ── */
+.period-btn {
+  background: var(--clr-bg3); color: var(--clr-txt3);
+  border: 1px solid var(--clr-border-dim);
+  padding: 1px 9px; border-radius: 3px; font-size: 10px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s;
+}
+.period-btn:hover { color: var(--clr-txt1); border-color: rgba(71, 87, 232, 0.5); }
+.period-btn.active { background: var(--clr-accent); color: #fff; border-color: var(--clr-accent); }
