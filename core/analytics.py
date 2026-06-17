@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from config.instruments import INSTRUMENTS, SECTORS, SECTOR_BY_ID, Instrument, build_tqsdk_id
+from config.instruments import INSTRUMENTS, SECTORS, SECTOR_BY_ID, Instrument, build_tqsdk_id, get_contract_suffix
 from config.settings import AppSettings
 from core.indicators import compute_macd_signals
 
@@ -144,7 +144,7 @@ def compute(quotes: Dict[str, dict], settings: AppSettings) -> DashboardSnapshot
     rows: List[InstrumentRow] = []
 
     for inst in INSTRUMENTS:
-        ins_id = build_tqsdk_id(inst)
+        ins_id = build_tqsdk_id(inst, get_contract_suffix(inst, settings.tqsdk.get_effective_suffix(inst.code, inst.contract_suffix or "")))
         q = quotes.get(ins_id)
         if not q or float(q.get("preSettlement", 0)) <= 0:
             continue

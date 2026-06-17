@@ -28,7 +28,7 @@ export const SECTOR_META = {
   nonferrous: { name: '有色金属',     color: SECTOR.nonferrous },
   agri:       { name: '农产品/油脂', color: SECTOR.agri },
   newenergy:  { name: '新能源/其他', color: SECTOR.newenergy },
-  financial:  { name: '金融期货',     color: '#f5c542' },
+  financial:  { name: '金融期货',     color: SECTOR.financial },
 };
 
 export const SECTOR_ORDER = ['ferrous', 'energy', 'nonferrous', 'agri', 'newenergy', 'financial'];

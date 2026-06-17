@@ -16,7 +16,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Dict, List
 
-from config.instruments import Instrument, build_tqsdk_id
+from config.instruments import Instrument, build_tqsdk_id, get_contract_suffix
 from config.settings import AppSettings
 from core.data_store import DataStore, Quote
 
@@ -116,7 +116,7 @@ class TqsdkProvider(BaseProvider):
             logger.error("tqsdk not installed. Run: pip install tqsdk")
             return
 
-        ins_ids = [build_tqsdk_id(inst) for inst in instruments]
+        ins_ids = [build_tqsdk_id(inst, get_contract_suffix(inst, settings.tqsdk.get_effective_suffix(inst.code, inst.contract_suffix or ""))) for inst in instruments]
         id_to_inst = dict(zip(ins_ids, instruments))
 
         while True:
@@ -299,7 +299,7 @@ class DemoProvider(BaseProvider):
         while True:
             await asyncio.sleep(cfg.tick_interval)
             for inst in instruments:
-                ins_id = build_tqsdk_id(inst)
+                ins_id = build_tqsdk_id(inst, get_contract_suffix(inst, settings.tqsdk.get_effective_suffix(inst.code, inst.contract_suffix or "")))
                 seed = self._seeds[inst.code]
                 quote = self._tick(ins_id, seed, cfg)
                 await store.update(ins_id, quote)

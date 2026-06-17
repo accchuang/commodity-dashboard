@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "web"
 sys.path.insert(0, str(ROOT))
 
-from config.instruments import INSTRUMENTS, build_tqsdk_id
+from config.instruments import INSTRUMENTS, build_tqsdk_id, get_contract_suffix
 from config.settings import AppSettings, settings as default_settings
 from core.data_store import DataStore
 from core.market_data import create_provider
@@ -116,9 +116,10 @@ async def get_instruments():
         {
             "code": i.code,
             "exchange": i.exchange,
-            "insId": build_tqsdk_id(i),
+            "insId": build_tqsdk_id(i, get_contract_suffix(i, settings.tqsdk.get_effective_suffix(i.code, i.contract_suffix or ""))),
             "name": i.name,
             "sectorId": i.sector_id,
+            "contractSuffix": get_contract_suffix(i, settings.tqsdk.get_effective_suffix(i.code, i.contract_suffix or "")),
         }
         for i in INSTRUMENTS
     ]
@@ -170,7 +171,8 @@ def main():
     parser.add_argument("--live", action="store_true", help="Force tqsdk live mode")
     parser.add_argument("--host", default=None, help="Bind host")
     parser.add_argument("--port", type=int, default=None, help="Bind port")
-    parser.add_argument("--suffix", default=None, help="Contract suffix (e.g. 2609)")
+    parser.add_argument("--suffix", default=None, help="Global contract suffix for all instruments (e.g. 2609)")
+    parser.add_argument("--contracts", default=None, help="Per-instrument contract suffixes (e.g. RB:2601,HC:2605)")
     args = parser.parse_args()
 
     if args.demo:
@@ -184,6 +186,12 @@ def main():
         settings.server.port = args.port
     if args.suffix:
         settings.tqsdk.contract_suffix = args.suffix
+    if args.contracts:
+        for pair in args.contracts.split(","):
+            pair = pair.strip()
+            if ":" in pair:
+                code, suffix = pair.split(":", 1)
+                settings.tqsdk.contract_suffixes[code.strip().upper()] = suffix.strip()
 
     import uvicorn
     uvicorn.run(

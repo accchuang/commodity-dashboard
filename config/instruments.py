@@ -3,8 +3,9 @@ Instrument and sector definitions.
 Add / remove instruments by editing INSTRUMENTS below — no other file changes needed.
 """
 
+import os
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 # ── Sector definitions ──────────────────────────────────────────────
@@ -156,15 +157,32 @@ INSTRUMENTS: List[Instrument] = [
 ]
 
 
-def build_tqsdk_id(inst: Instrument) -> str:
+def get_contract_suffix(inst: "Instrument", global_suffix: str = "") -> str:
+    """Resolve the effective contract suffix for an instrument.
+
+    Priority (highest first):
+    1. Instrument's own ``contract_suffix`` field
+    2. Environment variable ``CD_CONTRACT_{CODE}`` (e.g. ``CD_CONTRACT_RB=2501``)
+    3. Global suffix (from CLI ``--suffix`` or settings)
+    """
+    if inst.contract_suffix:
+        return inst.contract_suffix
+    env_val = os.environ.get(f"CD_CONTRACT_{inst.code.upper()}", "")
+    if env_val:
+        return env_val
+    return global_suffix
+
+
+def build_tqsdk_id(inst: "Instrument", effective_suffix: str = "") -> str:
     """Construct the tqsdk instrument id for quote subscription.
 
     Uses main-contract auto-resolution (``KQ.m@`` prefix) so tqsdk
     always returns the most actively traded contract month.
-    Set ``contract_suffix`` on an Instrument to pin a specific month.
+    Pass an *effective_suffix* to pin a specific month.
     """
-    if inst.contract_suffix:
-        return f"{inst.exchange}.{inst.code}{inst.contract_suffix}"
+    suffix = effective_suffix or inst.contract_suffix or ""
+    if suffix:
+        return f"{inst.exchange}.{inst.code}{suffix}"
     return f"KQ.m@{inst.exchange}.{inst.code}"
 
 

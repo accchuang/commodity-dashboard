@@ -68,10 +68,10 @@ export default function OICard({ data, maxAbsBar, maxAbsPriceBar, sectorColor })
       {/* Signal factor tags */}
       <div className="w-full mt-0.5 pt-0.5 border-t border-[var(--clr-border-faint)] min-h-[14px] flex items-center justify-center flex-wrap gap-x-1 gap-y-0.5">
         {signal === 'bullish' && (
-          <span className="text-[9px] px-1 rounded-sm bg-[rgba(88,166,255,0.15)] text-accent">MACD底背离</span>
+          <span className="text-[9px] px-1 rounded-sm bg-[var(--clr-signal-bullish-bg)] text-accent">MACD底背离</span>
         )}
         {signal === 'bearish' && (
-          <span className="text-[9px] px-1 rounded-sm bg-[rgba(235,157,255,0.18)] text-warn">MACD顶背离</span>
+          <span className="text-[9px] px-1 rounded-sm bg-[var(--clr-signal-bearish-bg)] text-warn">MACD顶背离</span>
         )}
       </div>
     </div>

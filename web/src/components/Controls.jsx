@@ -13,7 +13,7 @@ export default function Controls({ onConnect, autoRefresh, onToggleRefresh }) {
       />
       <button
         onClick={() => onConnect(wsUrl)}
-        className="bg-accent text-white rounded px-3 py-1 text-[11px] font-semibold hover:opacity-85 transition"
+        className="bg-accent text-bg1 rounded px-3 py-1 text-[11px] font-semibold hover:opacity-85 transition"
       >连接</button>
       <button
         onClick={onToggleRefresh}
