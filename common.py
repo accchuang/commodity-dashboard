@@ -1,9 +1,8 @@
 from tqsdk import TqApi, TqBacktest, TqAuth
-from tqsdk.tafunc import ma
+from tqsdk.tafunc import ma,time_to_str
 from dataclasses import dataclass, field
 from typing import List, Optional
 from datetime import date, timedelta
-
 # ==================== 配置参数（请根据实际情况修改） ====================
 # 合约列表 — 支持同时回测多个合约
 SYMBOLS = [
@@ -21,7 +20,8 @@ MA_FAST = 9                   # 快均线周期
 MA_SLOW = 21                  # 慢均线周期
 OVERLAP_THRESHOLD = 0.70      # 实体重叠阈值（70%）
 LOOKBACK_HIGH = 3             # 前一根K线极值回溯周期（放宽：5→3）
-BODY_RATIO_THRESHOLD = 0.5    # 大实体判定阈值（放宽：0.6→0.5）
+ATR_PERIOD = 7               # ATR 计算周期
+BIG_CANDLE_ATR_MULT = 0.8     # 大实体 ATR 倍数阈值：实体 > 平均ATR × 此倍数
 RISK_REWARD_RATIO = 1.5       # 盈亏比
 BODY_RATIO_MIN = 0.6          # 前后实体比下限（放宽：0.7→0.6）
 BODY_RATIO_MAX = 1.5          # 前后实体比上限（放宽：1.2→1.5）
@@ -64,13 +64,30 @@ class BacktestResult:
 
 
 # -------------------- 基础辅助函数 --------------------
-def is_big_candle(k, threshold=BODY_RATIO_THRESHOLD):
-    """判断是否为"大实体"：实体长度占振幅的比例超过阈值"""
-    amplitude = k.high - k.low
-    if amplitude == 0:
-        return False
+def calc_atr(klines, idx, period=ATR_PERIOD):
+    """计算指定位置的 ATR (Average True Range)"""
+    if idx < period:
+        return 0.0
+    tr_sum = 0.0
+    for i in range(idx - period + 1, idx + 1):
+        k = klines.iloc[i]
+        prev_k = klines.iloc[i - 1]
+        high_low = k.high - k.low
+        high_prev_close = abs(k.high - prev_k.close)
+        low_prev_close = abs(k.low - prev_k.close)
+        tr = max(high_low, high_prev_close, low_prev_close)
+        tr_sum += tr
+    return tr_sum / period
+
+
+def is_big_candle(klines, idx, threshold=BIG_CANDLE_ATR_MULT):
+    """判断是否为"大实体"：实体长度 > 平均ATR × 配置阈值"""
+    k = klines.iloc[idx]
     body = abs(k.close - k.open)
-    return body / amplitude >= threshold
+    avg_atr = calc_atr(klines, idx)
+    if avg_atr == 0:
+        return False
+    return body > avg_atr * threshold
 
 
 def is_bearish(k):
@@ -117,6 +134,39 @@ def calc_body_ratio(prev_k, curr_k):
     return curr_body / prev_body
 
 
+# -------------------- 诊断辅助函数 --------------------
+def _fmt_time(dt_val):
+    """将 K 线时间转为可读字符串，兼容纳秒时间戳/字符串/pandas Timestamp"""
+    try:
+        # 字符串直接返回
+        if isinstance(dt_val, str):
+            return dt_val
+        # pandas Timestamp / numpy datetime64
+        if hasattr(dt_val, "strftime"):
+            return dt_val.strftime("%Y-%m-%d %H:%M:%S")
+        # 纯数字 — 纳秒时间戳 (tqsdk 常见)
+        f = float(dt_val)
+        if f > 1e15:                        # 纳秒级
+            f /= 1e9
+        elif f > 1e12:                      # 微秒级
+            f /= 1e6
+        from datetime import datetime
+        return datetime.fromtimestamp(f).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return str(dt_val)
+
+
+def _print_condition_diag(direction, bar_time, passed, conditions):
+    """打印条件诊断信息：仅当超过 4 个条件满足时输出所有条件的通过/失败详情"""
+    if passed <= 4:
+        return
+    tag = "🔴" if direction == "做空" else "🟢"
+    print(f"\n  {tag} [{direction}] {time_to_str(bar_time)}  —— 条件满足 {passed}/6：")
+    for name, ok, detail in conditions:
+        mark = "✅" if ok else "❌"
+        print(f"     {mark} {name}: {detail}")
+
+
 # -------------------- 核心信号检测函数 --------------------
 def check_bearish_signal(klines, idx):
     """
@@ -128,36 +178,46 @@ def check_bearish_signal(klines, idx):
 
     curr = klines.iloc[idx]
     prev = klines.iloc[idx - 1]
+    bar_time = curr.datetime
 
     # 1. 均线空头排列
     ma9_series = ma(klines.close, MA_FAST)
     ma21_series = ma(klines.close, MA_SLOW)
-    if ma9_series.iloc[idx] >= ma21_series.iloc[idx]:
-        return False
+    ma9_val = ma9_series.iloc[idx]
+    ma21_val = ma21_series.iloc[idx]
+    c1_ok = ma9_val < ma21_val
 
     # 2. 实体重叠 ≥ 70%
-    if calc_overlap_ratio(prev, curr) < OVERLAP_THRESHOLD:
-        return False
+    overlap = calc_overlap_ratio(prev, curr)
+    c2_ok = overlap >= OVERLAP_THRESHOLD
 
     # 3. 前一根K线收盘价是近N周期最高点
     recent_high = klines.high.iloc[idx - LOOKBACK_HIGH:idx].max()
-    if prev.close < recent_high:
-        return False
+    c3_ok = prev.close >= recent_high
 
     # 4. 前一根K线是大实体
-    if not is_big_candle(prev):
-        return False
+    c4_ok = is_big_candle(klines, idx - 1)
 
     # 5. 当前K线是阴线
-    if not is_bearish(curr):
-        return False
+    c5_ok = is_bearish(curr)
 
     # 6. 实体比在配置范围内（前后K线实体大小相近）
     body_ratio = calc_body_ratio(prev, curr)
-    if body_ratio < BODY_RATIO_MIN or body_ratio > BODY_RATIO_MAX:
-        return False
+    c6_ok = BODY_RATIO_MIN <= body_ratio <= BODY_RATIO_MAX
 
-    return True
+    # 诊断输出
+    conditions = [
+        ("1.MA空头 MA9<MA21",    c1_ok, f"MA9={ma9_val:.4f} MA21={ma21_val:.4f}"),
+        ("2.实体重叠≥{:.0f}%".format(OVERLAP_THRESHOLD*100), c2_ok, f"重叠={overlap:.1%}"),
+        ("3.前高阻力(prev.close=近{}高)".format(LOOKBACK_HIGH), c3_ok, f"prev.close={prev.close:.4f} recent_high={recent_high:.4f}"),
+        ("4.前K大实体(ATR)",     c4_ok, f"prev_body={abs(prev.close-prev.open):.4f}"),
+        ("5.当前阴线",           c5_ok, f"O={curr.open:.4f} C={curr.close:.4f}"),
+        ("6.实体比{:.0f}%-{:.0f}%".format(BODY_RATIO_MIN*100, BODY_RATIO_MAX*100), c6_ok, f"ratio={body_ratio:.2f} prev={abs(prev.close-prev.open):.4f} curr={abs(curr.close-curr.open):.4f}"),
+    ]
+    passed = sum([c1_ok, c2_ok, c3_ok, c4_ok, c5_ok, c6_ok])
+    _print_condition_diag("做空", bar_time, passed, conditions)
+
+    return passed == 6
 
 
 def check_bullish_signal(klines, idx):
@@ -170,36 +230,46 @@ def check_bullish_signal(klines, idx):
 
     curr = klines.iloc[idx]
     prev = klines.iloc[idx - 1]
+    bar_time = str(curr.datetime)
 
     # 1. 均线多头排列
     ma9_series = ma(klines.close, MA_FAST)
     ma21_series = ma(klines.close, MA_SLOW)
-    if ma9_series.iloc[idx] <= ma21_series.iloc[idx]:
-        return False
+    ma9_val = ma9_series.iloc[idx]
+    ma21_val = ma21_series.iloc[idx]
+    c1_ok = ma9_val > ma21_val
 
     # 2. 实体重叠 ≥ 70%
-    if calc_overlap_ratio(prev, curr) < OVERLAP_THRESHOLD:
-        return False
+    overlap = calc_overlap_ratio(prev, curr)
+    c2_ok = overlap >= OVERLAP_THRESHOLD
 
     # 3. 前一根K线收盘价是近N周期最低点
     recent_low = klines.low.iloc[idx - LOOKBACK_HIGH:idx].min()
-    if prev.close > recent_low:
-        return False
+    c3_ok = prev.close <= recent_low
 
     # 4. 前一根K线是大实体
-    if not is_big_candle(prev):
-        return False
+    c4_ok = is_big_candle(klines, idx - 1)
 
     # 5. 当前K线是阳线
-    if not is_bullish(curr):
-        return False
+    c5_ok = is_bullish(curr)
 
     # 6. 实体比在配置范围内（前后K线实体大小相近）
     body_ratio = calc_body_ratio(prev, curr)
-    if body_ratio < BODY_RATIO_MIN or body_ratio > BODY_RATIO_MAX:
-        return False
+    c6_ok = BODY_RATIO_MIN <= body_ratio <= BODY_RATIO_MAX
 
-    return True
+    # 诊断输出
+    conditions = [
+        ("1.MA多头 MA9>MA21",    c1_ok, f"MA9={ma9_val:.4f} MA21={ma21_val:.4f}"),
+        ("2.实体重叠≥{:.0f}%".format(OVERLAP_THRESHOLD*100), c2_ok, f"重叠={overlap:.1%}"),
+        ("3.前低支撑(prev.close=近{}低)".format(LOOKBACK_HIGH), c3_ok, f"prev.close={prev.close:.4f} recent_low={recent_low:.4f}"),
+        ("4.前K大实体(ATR)",     c4_ok, f"prev_body={abs(prev.close-prev.open):.4f}"),
+        ("5.当前阳线",           c5_ok, f"O={curr.open:.4f} C={curr.close:.4f}"),
+        ("6.实体比{:.0f}%-{:.0f}%".format(BODY_RATIO_MIN*100, BODY_RATIO_MAX*100), c6_ok, f"ratio={body_ratio:.2f} prev={abs(prev.close-prev.open):.4f} curr={abs(curr.close-curr.open):.4f}"),
+    ]
+    passed = sum([c1_ok, c2_ok, c3_ok, c4_ok, c5_ok, c6_ok])
+    _print_condition_diag("做多", bar_time, passed, conditions)
+
+    return passed == 6
 
 
 # -------------------- tqsdk 回测引擎 --------------------
@@ -562,7 +632,7 @@ def main():
     print(f"╠══════════════════════════════════════════════════════════════╣")
     print(f"║  回测区间: {start_dt} ~ {end_dt}                     ║")
     print(f"║  K线周期: {DURATION}s | 盈亏比: 1:{RISK_REWARD_RATIO:.1f} | 回测天数: {BACKTEST_DAYS}天 | 缓冲: {DATA_LENGTH}根  ║")
-    print(f"║  MA{MA_FAST}/{MA_SLOW} | 回溯: {LOOKBACK_HIGH} | 重叠≥{int(OVERLAP_THRESHOLD*100)}% | 大实体≥{int(BODY_RATIO_THRESHOLD*100)}% | 实体比 {BODY_RATIO_MIN}-{BODY_RATIO_MAX} ║")
+    print(f"║  MA{MA_FAST}/{MA_SLOW} | 回溯: {LOOKBACK_HIGH} | 重叠≥{int(OVERLAP_THRESHOLD*100)}% | 大实体>ATR({ATR_PERIOD})×{BIG_CANDLE_ATR_MULT} | 实体比 {BODY_RATIO_MIN}-{BODY_RATIO_MAX} ║")
     print(f"║  合约数量: {len(SYMBOLS)}                                                   ║")
     print(f"╚══════════════════════════════════════════════════════════════╝")
 
