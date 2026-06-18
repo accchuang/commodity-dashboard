@@ -14,15 +14,17 @@ SYMBOLS = [
 TQ_USERNAME = "15583300776"
 TQ_PASSWORD = "Unfair4400"
 
-DURATION = 60 * 5             # K线周期（秒），60=1分钟，300=5分钟
+DURATION = 60 * 5         # K线周期（秒），60=1分钟，300=5分钟
 BACKTEST_DAYS = 30            # 回测天数（近N天）
-DATA_LENGTH = 200            # 拉取K线数量
+DATA_LENGTH = 500            # K线缓冲区（5分钟线约需 22天×80根=1760，设3000保险）
 MA_FAST = 9                   # 快均线周期
 MA_SLOW = 21                  # 慢均线周期
 OVERLAP_THRESHOLD = 0.70      # 实体重叠阈值（70%）
-LOOKBACK_HIGH = 5             # 前一根K线极值回溯周期
-BODY_RATIO_THRESHOLD = 0.6    # 大实体判定阈值（实体/振幅）
+LOOKBACK_HIGH = 3             # 前一根K线极值回溯周期（放宽：5→3）
+BODY_RATIO_THRESHOLD = 0.5    # 大实体判定阈值（放宽：0.6→0.5）
 RISK_REWARD_RATIO = 1.5       # 盈亏比
+BODY_RATIO_MIN = 0.6          # 前后实体比下限（放宽：0.7→0.6）
+BODY_RATIO_MAX = 1.5          # 前后实体比上限（放宽：1.2→1.5）
 
 
 # ======================================================================
@@ -150,9 +152,9 @@ def check_bearish_signal(klines, idx):
     if not is_bearish(curr):
         return False
 
-    # 6. 实体重叠 70%-120%（前一根K线实体与当前K线实体大小相近且有重叠）
+    # 6. 实体比在配置范围内（前后K线实体大小相近）
     body_ratio = calc_body_ratio(prev, curr)
-    if body_ratio < 0.70 or body_ratio > 1.20:
+    if body_ratio < BODY_RATIO_MIN or body_ratio > BODY_RATIO_MAX:
         return False
 
     return True
@@ -192,9 +194,9 @@ def check_bullish_signal(klines, idx):
     if not is_bullish(curr):
         return False
 
-    # 6. 实体重叠 70%-120%（前一根K线实体与当前K线实体大小相近且有重叠）
+    # 6. 实体比在配置范围内（前后K线实体大小相近）
     body_ratio = calc_body_ratio(prev, curr)
-    if body_ratio < 0.70 or body_ratio > 1.20:
+    if body_ratio < BODY_RATIO_MIN or body_ratio > BODY_RATIO_MAX:
         return False
 
     return True
@@ -260,6 +262,10 @@ def run_backtest(symbol: str) -> BacktestResult:
 
     # ---- 回测主循环 ----
     trades: List[Trade] = []
+
+    # 信号计数（调试用）
+    sig_bullish = 0
+    sig_bearish = 0
 
     # 状态机: IDLE → WAITING_ENTRY → IN_POSITION → IDLE
     state = "IDLE"
@@ -367,6 +373,7 @@ def run_backtest(symbol: str) -> BacktestResult:
         # ============================================================
         if state == "IDLE":
             if check_bullish_signal(klines, idx):
+                sig_bullish += 1
                 entry_price = curr.close
                 sl_price = curr.low              # 做多止损 = 信号K线最低点
                 risk = entry_price - sl_price
@@ -386,6 +393,7 @@ def run_backtest(symbol: str) -> BacktestResult:
                     state = "WAITING_ENTRY"
 
             elif check_bearish_signal(klines, idx):
+                sig_bearish += 1
                 entry_price = curr.close
                 sl_price = curr.high             # 做空止损 = 信号K线最高点
                 risk = sl_price - entry_price
@@ -435,6 +443,9 @@ def run_backtest(symbol: str) -> BacktestResult:
         _cancel_if_alive(api, entry_order)
 
     api.close()
+
+    # 调试输出
+    print(f"  [{symbol}] 信号统计: 做多={sig_bullish}, 做空={sig_bearish}, 成交={len(trades)}")
 
     # ---- 汇总统计 ----
     result = BacktestResult(symbol=symbol)
@@ -550,11 +561,9 @@ def main():
     print(f"║       商品期货 K线形态回测系统 (tqsdk TqBacktest)          ║")
     print(f"╠══════════════════════════════════════════════════════════════╣")
     print(f"║  回测区间: {start_dt} ~ {end_dt}                     ║")
-    print(f"║  K线周期: {DURATION}秒  |  盈亏比: 1:{RISK_REWARD_RATIO:.1f}  "
-         f"|  回测天数: {BACKTEST_DAYS}天               ║")
-    print(f"║  快均线: MA{MA_FAST}  |  慢均线: MA{MA_SLOW}  |  回溯: {LOOKBACK_HIGH}周期  "
-         f"|  重叠阈值: {OVERLAP_THRESHOLD*100:.0f}%        ║")
-    print(f"║  合约数量: {len(SYMBOLS)}                                           ║")
+    print(f"║  K线周期: {DURATION}s | 盈亏比: 1:{RISK_REWARD_RATIO:.1f} | 回测天数: {BACKTEST_DAYS}天 | 缓冲: {DATA_LENGTH}根  ║")
+    print(f"║  MA{MA_FAST}/{MA_SLOW} | 回溯: {LOOKBACK_HIGH} | 重叠≥{int(OVERLAP_THRESHOLD*100)}% | 大实体≥{int(BODY_RATIO_THRESHOLD*100)}% | 实体比 {BODY_RATIO_MIN}-{BODY_RATIO_MAX} ║")
+    print(f"║  合约数量: {len(SYMBOLS)}                                                   ║")
     print(f"╚══════════════════════════════════════════════════════════════╝")
 
     results: List[BacktestResult] = []
