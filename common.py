@@ -24,7 +24,8 @@ ATR_PERIOD = 7               # ATR 计算周期
 BIG_CANDLE_ATR_MULT = 0.8     # 大实体 ATR 倍数阈值：实体 > 平均ATR × 此倍数
 RISK_REWARD_RATIO = 1.5       # 盈亏比
 BODY_RATIO_MIN = 0.6          # 前后实体比下限（放宽：0.7→0.6）
-BODY_RATIO_MAX = 1.5          # 前后实体比上限（放宽：1.2→1.5）
+BODY_RATIO_MAX = 2         # 前后实体比上限（放宽：1.2→1.5）
+SIGNAL_MIN_CONDITIONS = 5   # 开仓最少满足条件数（6个条件中满足N个即可开仓）
 
 
 # ======================================================================
@@ -161,7 +162,7 @@ def _print_condition_diag(direction, bar_time, passed, conditions):
     if passed <= 4:
         return
     tag = "🔴" if direction == "做空" else "🟢"
-    print(f"\n  {tag} [{direction}] {time_to_str(bar_time)}  —— 条件满足 {passed}/6：")
+    print(f"\n  {tag} [{direction}] {time_to_str(int(bar_time))}  —— 条件满足 {passed}/6：")
     for name, ok, detail in conditions:
         mark = "✅" if ok else "❌"
         print(f"     {mark} {name}: {detail}")
@@ -217,7 +218,7 @@ def check_bearish_signal(klines, idx):
     passed = sum([c1_ok, c2_ok, c3_ok, c4_ok, c5_ok, c6_ok])
     _print_condition_diag("做空", bar_time, passed, conditions)
 
-    return passed == 6
+    return passed >= SIGNAL_MIN_CONDITIONS
 
 
 def check_bullish_signal(klines, idx):
@@ -230,7 +231,7 @@ def check_bullish_signal(klines, idx):
 
     curr = klines.iloc[idx]
     prev = klines.iloc[idx - 1]
-    bar_time = str(curr.datetime)
+    bar_time = curr.datetime
 
     # 1. 均线多头排列
     ma9_series = ma(klines.close, MA_FAST)
@@ -269,7 +270,7 @@ def check_bullish_signal(klines, idx):
     passed = sum([c1_ok, c2_ok, c3_ok, c4_ok, c5_ok, c6_ok])
     _print_condition_diag("做多", bar_time, passed, conditions)
 
-    return passed == 6
+    return passed >= SIGNAL_MIN_CONDITIONS
 
 
 # -------------------- tqsdk 回测引擎 --------------------
@@ -307,7 +308,7 @@ def run_backtest(symbol: str) -> BacktestResult:
 
     # ---- 创建回测 API ----
     bt = TqBacktest(start_dt=start_dt, end_dt=end_dt)
-    api = TqApi(auth=TqAuth(TQ_USERNAME, TQ_PASSWORD), backtest=bt)
+    api = TqApi(auth=TqAuth(TQ_USERNAME, TQ_PASSWORD), backtest=bt,web_gui=True)
 
     # ---- 订阅行情 ----
     klines = api.get_kline_serial(symbol, DURATION, data_length=DATA_LENGTH)
